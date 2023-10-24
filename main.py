@@ -4,9 +4,12 @@
 
 from collections import UserDict
 from datetime import date, datetime
+import pickle
 import sys
 import re
 
+
+file_name = 'book.bin'
 
 def normalize_phone(phone):
     numbers = re.findall('\d+', str(phone))
@@ -268,6 +271,8 @@ def show(text):
 
 # exit program
 def exit(_):
+    with open(file_name, 'wb') as file:
+        pickle.dump(book, file)
     return sys.exit('Good bye!\n')
 
 
@@ -298,6 +303,14 @@ def find_command(text=""):
 
 
 book = AddressBook()
+try:
+    with open(file_name, 'rb') as file:
+        book = pickle.load(file)
+        print('book loadeed')
+except:
+    print('No book file yet')
+
+
 
 def main():
     print("I'm Phone_Book_BOT, HELLO!!!")
