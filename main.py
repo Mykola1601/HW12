@@ -1,7 +1,9 @@
 
+# web HW 1 
 
-# HW 12 
-
+from abc import ABC, abstractmethod
+from prompt_toolkit import prompt
+from prompt_toolkit.completion import NestedCompleter
 from collections import UserDict
 from datetime import date, datetime
 import pickle
@@ -19,18 +21,25 @@ def normalize_phone(phone):
         return None
 
 
-class Field:
+class Field(ABC):
     def __init__(self, value):
         self.value = value
 
     def __str__(self):
         return str(self.value)
 
+    @abstractmethod
+    def __getitem__(self):
+        pass
+
 
 class Name(Field):
     def __init__(self, value):
         self.value = value
-  
+
+    def __getitem__(self):
+        return self.value
+
 
 class Birthday(Field):
     def __init__(self, value):
@@ -52,12 +61,15 @@ class Birthday(Field):
     def __str__(self):
         return str(self.value)
 
+    def __getitem__(self):
+        return self.value
   
+
 class Phone(Field):
     def __init__(self, value):
         self.__value = None
         self.value = value
-        # super().__init__(self.__value)
+        # super().__init__(self.__value)  #???
 
     @property
     def value(self):
@@ -69,14 +81,40 @@ class Phone(Field):
         if not self.__value:
             raise ValueError  (f"Invalid phone number format != 10digit")
 
-    
+    def __getitem__(self):
+        return self.value
+
+
+class MailField(Field):
+    def __init__(self, value):
+        self.__value = None
+        self.value = value
+
+    @property
+    def value(self):
+        return self.__value
+
+    @value.setter
+    def value(self, mail):
+        iterator = re.finditer(
+            r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", mail)
+        for match in iterator:
+            self.__value = match.group()
+        if not self.__value:
+            raise ValueError(f"{mail} isn't valid mail")
+
+    def __eq__(self, other) -> bool:
+        return self.value == other.value
+
+    def __getitem__(self):
+        return self.value
 
 
 class Record:
     def __init__(self, name):
         self.name = Name(name)
-        # self.__phones = []
         self.phones = []
+        self.mails = []
         self.__birthday = None
 
     def add_phone(self, phone: str) -> None:
@@ -85,7 +123,11 @@ class Record:
             return f"Phone number {phone} add to contact {self.name}"
         print (f"Phone number {phone} present in contact {self.name}")
 
-    
+    def add_mail(self, mail: str) -> None:
+        if mail not in self.mails:
+            self.mails.append(MailField(mail))
+            return f"Mail {mail} added to contact {self.name}"
+        print (f"Mail {mail} present in contact {self.name}")
 
     def remove_phone(self, phone_number: str) -> None | str:
         for phone in self.phones:
@@ -94,7 +136,6 @@ class Record:
                 break
         else:
             raise ValueError(f'phone {phone_number} not found ')
-
 
     def edit_phone(self, *args):
         old_phone = args[0]
@@ -111,7 +152,6 @@ class Record:
             if phone.value == phone_number:
                 return phone
         else:
-            # raise ValueError(f'phone {phone_number} not found in the record')   
             return (f'phone {phone_number} not found in the record')          
 
     def days_to_birthday(self) :
@@ -129,13 +169,11 @@ class Record:
         else:
             return('No birthday date')
 
-
     def add_birthday(self, *args):
         try:
             self.__birthday = Birthday(args[0]) 
         except ValueError:
             print('Error input - Enter birthday in format YYYY-mm-dd')
-
 
     def __str__(self):
         return f"Contact: {self.name.value}; phones: {'; '.join(p.value for p in self.phones)}{'; Birthday '+ str(self.__birthday.value) if self.__birthday else '' }{';  '+ Record.days_to_birthday(self) if self.__birthday else '' }"
@@ -147,6 +185,20 @@ class AddressBook(UserDict):
         self.data[name] = args[0]
         self.idx = 0
 
+    def load(self) -> None:
+        # load contacts from file
+        try:
+            with open(file_name, 'rb') as file:
+                self = pickle.load(file)
+                print('Book loadeed from file ')
+                return self
+        except:
+            print('No book file yet')
+
+    def save(self):
+        with open(file_name, 'wb') as file:
+            pickle.dump(book, file)
+       
     def find(self, *args):
         name = args[0]
         if name in self.data:
@@ -157,7 +209,6 @@ class AddressBook(UserDict):
     def delete(self, *args):
         if self.data.get(args[0]):
             self.data.pop(args[0])
-
 
     def __iter__(self):
         self.lst =[]
@@ -173,10 +224,12 @@ class AddressBook(UserDict):
             self.idx = 0
             raise StopIteration
 
-
-  
-
 # ============================================================================================
+
+class Printing:
+    def __init__(self) -> None:
+        pass
+
 
 
 # decor
@@ -188,19 +241,19 @@ def errors(func):
             return "Give me valid data !!!"
     return inner
 
-
 # greetings
 def greeting(_):
     return ("How can I help you?")
 
-
 # add contact
+
+
 @errors
 def add(text=""):
-    text = text.removeprefix("add ")  #remove command
-    name = text.split()[0].title()    #get Name
-    text = text.removeprefix(name.lower())    #remove Name
-    if not len(text) >9:
+    text = text.strip()
+    name = text.split()[0].title()  # get Name
+    text = text.removeprefix(name.lower())  # remove Name
+    if not len(text) > 9:
         return 'Enter valid  phone 10dig'
     phone = normalize_phone(text)
     # phone = text
@@ -210,17 +263,34 @@ def add(text=""):
         name = Record(name)
         name.add_phone(phone)
         book.add_record(name)
-        return name.name.value+" saved with number "+ phone
+        return name.name.value+" saved with number " + phone
     name = book.find(name)
     name.add_phone(phone)
     book.add_record(name)
-    return  name.name.value+' added phone '+ phone
+    return name.name.value+' added phone ' + phone
 
+# add contact
+
+
+@errors
+def add_mail(text=""):
+    text = text.strip()
+    name = text.split()[0].title()  # get Name
+    text = text.removeprefix(name.lower())  # remove Name
+    mail = text.strip()
+    if not len(mail) > 5:
+        return 'Enter valid  mail > to short'
+    if not book.find(name):
+        return name.name.value +" not in book "  
+    name = book.find(name)
+    name.add_mail(mail)
+    book.add_record(name)
+    return name.name.value+' added mail ' + mail
 
 # add birthday
 @errors
 def birthday(text=""):
-    text = text.removeprefix("birthday ")         #remove command
+    text = text.strip()
     name = text.split()[0].title()               #get Name
     text = text.removeprefix(name.lower())       #remove Name
     birthday = text.strip()
@@ -230,13 +300,10 @@ def birthday(text=""):
     else:
         return 'no '+name+' in book, add phone first'
 
-
-
-
 # change contact if exist
 @errors
 def change(text=""):
-    text = text.removeprefix("change ")
+    text = text.strip()
     name = text.split()[0].title()
     text = text.removeprefix(name.lower())
     if not len(text) >9:
@@ -252,16 +319,14 @@ def change(text=""):
     else:
         return (f"no {name} in phone book")
 
-
 # search contact 
 def phone(text=""):
-    text = text.removeprefix("phone ")
+    text = text.strip()
     name = text.split()[0].title()
     if name in book.data.keys():
         return  book.data[name]
     else:
         return name+' not exist in phone book!!!' 
-
 
 # show all iter
 def show_all(_):
@@ -270,11 +335,8 @@ def show_all(_):
         list += str(cont) +'\r\n'
     return list
 
-
-
 # show digit
 def show(text):
-    text = text.removeprefix("show")
     text = text.strip()
     if text.isdigit():
         counter = int(text)        
@@ -304,10 +366,8 @@ def help(_):
     """
 
 
-
 # iter in book and compare with FIND_text
 def find(text):
-    text = text.removeprefix("find ")
     text = text.strip()
     if not len(text) > 2:
         return 'Enter more then 2 simbols to find'
@@ -318,13 +378,10 @@ def find(text):
     return list if len(list) > 1 else 'Cant find it'
 
 
-
 # exit program and save book to hhd
 def exit(_):
-    with open(file_name, 'wb') as file:
-        pickle.dump(book, file)
+    book.save()
     return sys.exit('Good bye!\n')
-
 
 
 # dict for commands
@@ -334,7 +391,8 @@ dic = {
     "hi":greeting,
     "hello":greeting,
     "birthday ":birthday,     #adding birthday
-    "add ":add,
+    "add phone ":add,
+    "add mail ": add_mail,
     "change ":change,
     "phone ":phone,
     "show all":show_all,
@@ -350,39 +408,46 @@ def find_command(text=""):
     text = text.lower()
     for kee in dic.keys():
         if kee in text:
-            return kee
+            return kee, text.removeprefix(kee)
     return None
 
+
+def tips():
+    # створення списку підказок
+    variants = {}
+    for i in dic.keys():
+        variants[i] = None
+    # Створення об'єкта WordCompleter для автодоповнення
+    completer = NestedCompleter.from_nested_dict(variants)
+    return completer
 
 
 book = AddressBook()
 
-# load contacts from file
-try:
-    with open(file_name, 'rb') as file:
-        book = pickle.load(file)
-        print('Book loadeed from file ')
-except:
-    print('No book file yet')
-
-
-# exit save book!!!
 def main():
     print("I'm Phone_Book_BOT, HELLO!!!")
     # loop forever
     while True:
-        user_input =  (input(">>>"))
-        comand = find_command(user_input)
+        user_input = (prompt(">>>", completer = tips()))
+        comand, user_input = find_command(user_input)
         if not comand:
-            print("Do not undestend, try again")
+            print("Do not undestend, try again or use 'help'")
         else:
             out = dic[comand](user_input)
             print(out)
 
 
 # ========================================
+# ========================================
+
 if __name__ == "__main__":
+    # book = book.load()
+    # n = book.data['Nina']
+    # n.name.__getitem__()
     main()
 
-# "exit" or "close" or "good bye" for SAVE book changes in file !!!!!!!
-#  "help" for help
+
+
+
+
+
